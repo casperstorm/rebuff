@@ -2,9 +2,11 @@
 
 Shows the next buff that is missing or about to run out, on you or your party, and casts it with one hotkey. For WoW Forever.
 
+![Rebuff](demo.gif)
+
 ## Features
 
-- **Your buffs:** Drop spells from your spellbook onto the options window. Each one is kept up on yourself or on your party. A party buff can be kept to the classes you pick.
+- **Your buffs:** Drop spells from your spellbook onto the options window. Each one is kept up on yourself or on your party. A party buff can be kept to the classes you pick, and can also be offered to a player you target.
 - **One icon:** The next buff to cast shows as a button, with the time it has left and who needs it. Group versions count: Prayer of Fortitude satisfies Power Word: Fortitude.
 - **One hotkey:** Mouse wheel down by default. It casts what the icon shows, and is Rebuff's only while a buff is due and in range. The rest of the time the key does what it always did.
 - **In combat:** Rebuff steps aside. The icon hides and the hotkey is given back, also while dead or mounted.
@@ -16,6 +18,8 @@ Shows the next buff that is missing or about to run out, on you or your party, a
 3. Pick for each whether it goes on yourself or on your party. In a raid, your party is your own raid group.
 
 While the options are open the icon shows, to be dragged into place. Later, Alt-drag it. `/rebuff status` tells what Rebuff sees right now, and `/rebuff help` lists the commands.
+
+![Rebuff options](settings.png)
 
 ## Installation
 
