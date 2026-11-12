@@ -9,14 +9,16 @@
 
 local _, ns = ...;
 
-local WIDTH, HEIGHT = 338, 478;
+local WIDTH, HEIGHT = 338, 512;
 local MARGIN = 29;
 local INNER = WIDTH - 2 * MARGIN;
 local SLOT, SLOT_GAP, COLUMNS = 40, 8, 6;
+local CLASS, CLASS_GAP = 24, 6;
+local CLASS_ICONS = "Interface\\Glues\\CharacterCreate\\UI-CharacterCreate-Classes";
 
 local WHO = {
 	{ key = "self", label = "Myself", note = "Watched on you alone." },
-	{ key = "party", label = "My party", note = "Watched on you and your party. In a raid, on your own group." },
+	{ key = "party", label = "My party", note = "Watched on you and your party; in a raid, on your own group. Pick classes to keep it to those." },
 };
 
 local WARNINGS = {
@@ -168,6 +170,60 @@ local function CreateSlot(parent, index)
 	return slot;
 end
 
+-- The class's icon, from whichever of the client's sets of them is there; a
+-- square in the class colour where neither is.
+local function SetClassIcon(texture, class)
+	local atlas = "classicon-" .. strlower(class);
+	local coords = CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[class];
+	local colour = RAID_CLASS_COLORS and RAID_CLASS_COLORS[class];
+	if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(atlas) then
+		texture:SetAtlas(atlas);
+	elseif coords then
+		texture:SetTexture(CLASS_ICONS);
+		texture:SetTexCoord(unpack(coords));
+	elseif colour then
+		texture:SetColorTexture(colour.r, colour.g, colour.b);
+	else
+		texture:SetColorTexture(0.5, 0.5, 0.5);
+	end
+end
+
+-- One class of a party buff: lit when the buff is kept on that class.
+local function CreateClass(parent, index, class)
+	local button = CreateFrame("Button", nil, parent);
+	button.class = class;
+	button:SetSize(CLASS, CLASS);
+	button:SetPoint("LEFT", parent, "LEFT", (index - 1) * (CLASS + CLASS_GAP), 0);
+	button.icon = button:CreateTexture(nil, "ARTWORK");
+	button.icon:SetAllPoints();
+	SetClassIcon(button.icon, class);
+	local highlight = button:CreateTexture(nil, "HIGHLIGHT");
+	highlight:SetAllPoints();
+	highlight:SetColorTexture(1, 1, 1, 0.2);
+	highlight:SetBlendMode("ADD");
+
+	button:SetScript("OnClick", function(self)
+		Sound("IG_MAINMENU_OPTION_CHECKBOX_ON");
+		ns.ToggleClass(selected, self.class);
+		Update();
+	end);
+	button:SetScript("OnEnter", function(self)
+		local name = ns.ClassName(self.class);
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+		GameTooltip:AddLine(name);
+		if not selected.classes then
+			GameTooltip:AddLine("Kept on every class. Click to keep it on this class only.", 1, 1, 1, true);
+		elseif selected.classes[self.class] then
+			GameTooltip:AddLine("Kept on this class. Click to leave it out.", 1, 1, 1, true);
+		else
+			GameTooltip:AddLine("Left out. Click to keep it on this class too.", 1, 1, 1, true);
+		end
+		GameTooltip:Show();
+	end);
+	button:SetScript("OnLeave", GameTooltip_Hide);
+	return button;
+end
+
 -- A checkbox with its label beside it. The label is part of the click target.
 local function CreateCheck(parent, label, onClick)
 	local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate");
@@ -311,7 +367,7 @@ local function Build()
 	-- The selected buff's settings
 	local detail = CreateFrame("Frame", nil, body);
 	detail:SetPoint("TOPLEFT", 0, -178);
-	detail:SetSize(WIDTH, 84);
+	detail:SetSize(WIDTH, 118);
 	frame.detail = detail;
 
 	detail.name = detail:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge");
@@ -332,35 +388,46 @@ local function Build()
 	detail.note:SetPoint("TOPLEFT", MARGIN, -62);
 	detail.note:SetWidth(INNER);
 	detail.note:SetJustifyH("LEFT");
+	detail.note:SetJustifyV("TOP");
+	detail.note:SetHeight(24);
 
-	CreateDivider(body, -266);
+	-- Which classes of the party; for a buff kept on the party only
+	detail.classRow = CreateFrame("Frame", nil, detail);
+	detail.classRow:SetPoint("TOPLEFT", MARGIN, -90);
+	detail.classRow:SetSize(INNER, CLASS);
+	detail.classes = {};
+	for index, class in ipairs(ns.CLASSES) do
+		detail.classes[index] = CreateClass(detail.classRow, index, class);
+	end
+
+	CreateDivider(body, -300);
 
 	-- What holds for every buff
-	CreateLabel(body, "Show a buff when it has less than", -276);
+	CreateLabel(body, "Show a buff when it has less than", -310);
 	frame.warnings = {};
 	for index, warning in ipairs(WARNINGS) do
 		local radio = CreateCheck(body, warning.label, function()
 			ns.SetWarn(warning.seconds);
 		end);
 		if index <= 4 then
-			radio:SetPoint("TOPLEFT", MARGIN - 4 + (index - 1) * 70, -288);
+			radio:SetPoint("TOPLEFT", MARGIN - 4 + (index - 1) * 70, -322);
 		else
-			radio:SetPoint("TOPLEFT", MARGIN - 4, -310);
+			radio:SetPoint("TOPLEFT", MARGIN - 4, -344);
 		end
 		frame.warnings[warning.seconds] = radio;
 	end
 
-	CreateLabel(body, "Hotkey", -342);
+	CreateLabel(body, "Hotkey", -376);
 	frame.key = CreateKeyButton(body);
-	frame.key:SetPoint("TOPLEFT", MARGIN - 2, -355);
+	frame.key:SetPoint("TOPLEFT", MARGIN - 2, -389);
 
 	frame.sound = CreateCheck(body, "Play a sound when a buff comes due", function(self)
 		ns.SetSound(self:GetChecked() and true or false);
 	end);
-	frame.sound:SetPoint("TOPLEFT", MARGIN - 4, -384);
+	frame.sound:SetPoint("TOPLEFT", MARGIN - 4, -418);
 
 	local move = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall");
-	move:SetPoint("TOPLEFT", MARGIN, -414);
+	move:SetPoint("TOPLEFT", MARGIN, -448);
 	move:SetWidth(INNER);
 	move:SetJustifyH("LEFT");
 	move:SetText("While this window is open the button shows, to be dragged into place.");
@@ -424,6 +491,12 @@ local function Fill()
 			if selected.who == who.key then
 				detail.note:SetText(who.note);
 			end
+		end
+		detail.classRow:SetShown(selected.who == "party");
+		for _, class in ipairs(detail.classes) do
+			local lit = ns.ClassAllowed(selected, class.class);
+			class.icon:SetDesaturated(not lit);
+			class:SetAlpha(lit and 1 or 0.4);
 		end
 	end
 

@@ -54,6 +54,7 @@ local function widget(kind, name, template)
     GetDrawLayer = function(s) return s._layer or "ARTWORK", s._sub or 0 end,
     SetDrawLayer = function(s, l, sub) s._layer, s._sub = l, sub end,
     GetBlendMode = function(s) return s._blend or "BLEND" end,
+    SetAlpha = function(s, a) s._alpha = a end,
     SetDesaturated = function(s, v) assert(type(v) == "boolean", "SetDesaturated needs a boolean"); s._gray = v end,
     GetFrameLevel = function() return 1 end,
     GetStringWidth = function() return 40 end,
@@ -153,6 +154,8 @@ function UnitIsConnected(unit) return not units[unit].offline end
 function UnitIsDeadOrGhost(unit) return units[unit].dead or false end
 function UnitCanAssist(_, unit) return not units[unit].hostile end
 function UnitIsVisible(unit) return not units[unit].unseen end
+function UnitClass(unit) local class = units[unit].class or "ROGUE"; return class, class, 1 end
+CLASS_ICON_TCOORDS = { PALADIN = { 0, 0.25, 0.25, 0.5 } }
 function UnitIsUnit(a, b) return units[a] ~= nil and units[a] == units[b] end
 function IsInRaid() return raid end
 function GetRaidRosterInfo(index) local u = units["raid" .. index]; return u and u.name, 0, u and u.group end
@@ -316,6 +319,25 @@ button._points = { { "TOPLEFT", UIParent, "TOPLEFT", 12, -34 } }; button._script
 assert(db.point == "TOPLEFT" and db.x == 12 and db.y == -34)
 SlashCmdList.REBUFF("reset"); assert(db.point == "CENTER" and button._points[1][5] == -120)
 
+-- Classes: a party buff kept to some of them
+units.player.class, units.party1.class, units.party2.class, units.party3.class, units.party4.class = "PRIEST", "WARRIOR", "PALADIN", "MAGE", "PRIEST"
+take("party2", "Prayer of Fortitude"); tick(); assert(button._attr.unit == "party1")
+NS.ToggleClass(fort, "PALADIN")
+assert(fort.classes.PALADIN and not fort.classes.WARRIOR and button._attr.unit == "party2", "from everyone, a click picks that class alone")
+NS.ToggleClass(fort, "WARRIOR"); assert(button._attr.unit == "party1" and NS.ClassAllowed(fort, "WARRIOR") and not NS.ClassAllowed(fort, "MAGE"))
+NS.ToggleClass(fort, "WARRIOR"); NS.ToggleClass(fort, "MAGE"); assert(button._attr.unit == "party2")
+take("player", "Power Word: Fortitude"); tick(); assert(button._attr.unit == "party2", "the choice holds for you too")
+printed = {}; SlashCmdList.REBUFF("status"); assert(said("party, only Paladin and Mage"))
+units.party2.class = SECRET; tick(); assert(not button._shown, "a class that cannot be told is not buffed")
+units.party2.class = "PALADIN"; units.party2.dead = true; units.party3.dead = true; tick(); assert(NS.Status(fort) == "No one to keep it on")
+units.party2.dead, units.party3.dead = nil, nil
+NS.ToggleClass(fort, "PALADIN"); NS.ToggleClass(fort, "MAGE")
+assert(fort.classes == nil and button._attr.unit == "player", "leaving out the last class is everyone again")
+-- A buff kept on yourself has no classes to go by
+inner.classes = { MAGE = true }; take("player", "Inner Fire"); tick(); assert(button._attr.spell == "Inner Fire")
+inner.classes = nil; give("player", "Inner Fire", 600, 600); give("player", "Power Word: Fortitude", 1800, 1800); give("party2", "Prayer of Fortitude", 3600, 3500); tick()
+assert(button._attr.unit == "party1")
+
 -- A raid: your own group only
 raid = true; units.party1, units.party2, units.party3, units.party4 = nil, nil, nil, nil
 units.raid1 = { name = "Eve", group = 2 }; units.raid2 = units.player; units.player.group = 1; units.raid3 = { name = "Fay", group = 1 }
@@ -342,7 +364,15 @@ assert(window.warnings[60]._checked and not window.warnings[0]._checked and wind
 -- Select, and change who it is kept on
 slots[2]._scripts.OnClick(slots[2], "LeftButton"); assert(detail.name._text == "Power Word: Fortitude" and detail.who.party._checked and slots[2]._locked)
 detail.who.self._scripts.OnClick(detail.who.self); assert(fort.who == "self" and detail.who.self._checked and detail.note._text:find("alone"))
+assert(not detail.classRow._shown, "no classes to pick for a buff on yourself")
 detail.who.party._scripts.OnClick(detail.who.party); assert(fort.who == "party")
+local classes = detail.classes
+assert(detail.classRow._shown and #classes == 9 and classes[2].class == "PALADIN" and classes[2]._alpha == 1 and classes[1]._alpha == 1)
+assert(classes[2].icon._tex and classes[1].icon._tex == nil, "icon from the client's set, or a plain square")
+classes[2]._scripts.OnEnter(classes[2]); classes[2]._scripts.OnClick(classes[2])
+assert(fort.classes.PALADIN and classes[2]._alpha == 1 and classes[1]._alpha == 0.4 and classes[1].icon._gray == true and classes[2].icon._gray == false)
+classes[2]._scripts.OnEnter(classes[2]); classes[1]._scripts.OnEnter(classes[1])
+classes[2]._scripts.OnClick(classes[2]); assert(fort.classes == nil and classes[1]._alpha == 1)
 window.warnings[120]._scripts.OnClick(window.warnings[120]); assert(db.warn == 120 and window.warnings[120]._checked and not window.warnings[60]._checked)
 window.warnings[60]._scripts.OnClick(window.warnings[60])
 window.sound._checked = false; window.sound._scripts.OnClick(window.sound); assert(db.sound == false)

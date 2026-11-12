@@ -53,6 +53,8 @@ local PAIRS = {
 };
 
 local SELF = { "player" };
+-- The classes a party buff can be kept to
+local CLASSES = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" };
 
 -- Newer clients moved these into namespaces
 local GetSpellName = C_Spell and C_Spell.GetSpellName or function(spell) return (GetSpellInfo(spell)); end;
@@ -261,6 +263,16 @@ local function Around(unit)
 		and UnitCanAssist("player", unit) and true or false;
 end
 
+-- Whether a unit is of a class the buff is kept on. Without a choice of
+-- classes everyone is; a class that cannot be told is not.
+local function Wanted(buff, unit)
+	if buff.who ~= "party" or not buff.classes then
+		return true;
+	end
+	local _, class = UnitClass(unit);
+	return not Secret(class) and buff.classes[class] == true;
+end
+
 local function SpellRange(spell, unit)
 	local ok, result = false, nil;
 	if C_Spell and C_Spell.IsSpellInRange then
@@ -325,7 +337,7 @@ end
 local function Survey(buff, scan)
 	local due, unread, read = {}, 0, 0;
 	for _, unit in ipairs(buff.who == "party" and scan.units or SELF) do
-		if unit == "player" or Around(unit) then
+		if (unit == "player" or Around(unit)) and Wanted(buff, unit) then
 			local found = scan.auras[unit];
 			if found == nil then
 				found = ReadAuras(unit, scan.now) or false;
@@ -895,6 +907,50 @@ function ns.SetWho(buff, who)
 	end
 end
 
+function ns.ClassAllowed(buff, class)
+	return not buff.classes or buff.classes[class] == true;
+end
+
+-- A click on a class in the options. With the buff on everyone it picks that
+-- class alone; after that it adds the class or leaves it out. Leaving out the
+-- last one puts the buff back on everyone.
+function ns.ToggleClass(buff, class)
+	local chosen, count = {}, 0;
+	for _, token in ipairs(CLASSES) do
+		local on = token == class;
+		if buff.classes then
+			on = (buff.classes[token] == true) ~= on;
+		end
+		if on then
+			chosen[token] = true;
+			count = count + 1;
+		end
+	end
+	buff.classes = count > 0 and count < #CLASSES and chosen or nil;
+	Refresh();
+end
+
+local function ClassName(class)
+	return LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[class]
+		or class:sub(1, 1) .. strlower(class:sub(2));
+end
+
+-- "party", or "party, only Paladin and Priest"
+local function WhoText(buff)
+	if buff.who ~= "party" then
+		return "self";
+	elseif not buff.classes then
+		return "party";
+	end
+	local names = {};
+	for _, token in ipairs(CLASSES) do
+		if buff.classes[token] then
+			names[#names + 1] = ClassName(token);
+		end
+	end
+	return "party, only " .. table.concat(names, " and ");
+end
+
 function ns.SetWarn(seconds)
 	db.warn = math.min(math.max(seconds, 0), 600);
 	Refresh();
@@ -938,7 +994,10 @@ function ns.Status(buff)
 	if not ok then
 		return "Cannot be checked";
 	elseif #due == 0 then
-		return (read == 0 and unread > 0) and "Cannot be read" or "Up";
+		if read == 0 then
+			return unread > 0 and "Cannot be read" or "No one to keep it on";
+		end
+		return "Up";
 	end
 	local first = due[1];
 	local text = first.state == "missing" and "Missing" or Clock(first.left) .. " left";
@@ -984,7 +1043,7 @@ local function PrintStatus()
 				line = ("%s; %d read, %d unreadable"):format(line, read, unread);
 			end
 		end
-		print(("  %s (%s): %s"):format(buff.name, buff.who == "party" and "party" or "self", line));
+		print(("  %s (%s): %s"):format(buff.name, WhoText(buff), line));
 	end
 end
 
@@ -1025,6 +1084,8 @@ end
 
 -- For the options window
 ns.MAX_BUFFS = MAX_BUFFS;
+ns.CLASSES = CLASSES;
+ns.ClassName = ClassName;
 ns.PORTRAIT = PORTRAIT;
 ns.QUESTION_MARK = QUESTION_MARK;
 ns.Print = Print;

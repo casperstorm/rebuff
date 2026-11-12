@@ -4,7 +4,7 @@ Shows the next buff that is missing or about to run out, on you or your party, a
 
 ## Features
 
-- **Your buffs:** Drop spells from your spellbook onto the options window. Each one is kept up on yourself or on your party.
+- **Your buffs:** Drop spells from your spellbook onto the options window. Each one is kept up on yourself or on your party. A party buff can be kept to the classes you pick.
 - **One icon:** The next buff to cast shows as a button, with the time it has left and who needs it. Group versions count: Prayer of Fortitude satisfies Power Word: Fortitude.
 - **One hotkey:** Mouse wheel down by default. It casts what the icon shows, and is Rebuff's only while a buff is due and in range. The rest of the time the key does what it always did.
 - **In combat:** Rebuff steps aside. The icon hides and the hotkey is given back, also while dead or mounted.
