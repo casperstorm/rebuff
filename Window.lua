@@ -9,7 +9,7 @@
 
 local _, ns = ...;
 
-local WIDTH, HEIGHT = 338, 512;
+local WIDTH, HEIGHT = 338, 536;
 local MARGIN = 29;
 local INNER = WIDTH - 2 * MARGIN;
 local SLOT, SLOT_GAP, COLUMNS = 40, 8, 6;
@@ -426,8 +426,20 @@ local function Build()
 	end);
 	frame.sound:SetPoint("TOPLEFT", MARGIN - 4, -418);
 
+	frame.target = CreateCheck(body, "Also buff a player I target", function(self)
+		ns.SetTarget(self:GetChecked() and true or false);
+	end);
+	frame.target:SetPoint("TOPLEFT", MARGIN - 4, -440);
+	frame.target:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+		GameTooltip:AddLine("Also buff a player I target");
+		GameTooltip:AddLine("A friendly player you target, outside your party, is offered your party buffs too, and before anyone else. The classes picked for a buff hold for them as well.", 1, 1, 1, true);
+		GameTooltip:Show();
+	end);
+	frame.target:SetScript("OnLeave", GameTooltip_Hide);
+
 	local move = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall");
-	move:SetPoint("TOPLEFT", MARGIN, -448);
+	move:SetPoint("TOPLEFT", MARGIN, -472);
 	move:SetWidth(INNER);
 	move:SetJustifyH("LEFT");
 	move:SetText("While this window is open the button shows, to be dragged into place.");
@@ -505,6 +517,7 @@ local function Fill()
 	end
 	window.key:SetText(listening and "Press a key..." or ns.KeyText(settings.key or nil));
 	window.sound:SetChecked(settings.sound and true or false);
+	window.target:SetChecked(settings.target and true or false);
 end
 
 -- Brings the window in line with the buffs. It runs in the middle of the

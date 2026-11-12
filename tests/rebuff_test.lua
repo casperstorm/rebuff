@@ -156,6 +156,7 @@ function UnitCanAssist(_, unit) return not units[unit].hostile end
 function UnitIsVisible(unit) return not units[unit].unseen end
 function UnitClass(unit) local class = units[unit].class or "ROGUE"; return class, class, 1 end
 CLASS_ICON_TCOORDS = { PALADIN = { 0, 0.25, 0.25, 0.5 } }
+function UnitIsPlayer(unit) return not units[unit].npc end
 function UnitIsUnit(a, b) return units[a] ~= nil and units[a] == units[b] end
 function IsInRaid() return raid end
 function GetRaidRosterInfo(index) local u = units["raid" .. index]; return u and u.name, 0, u and u.group end
@@ -338,6 +339,26 @@ inner.classes = { MAGE = true }; take("player", "Inner Fire"); tick(); assert(bu
 inner.classes = nil; give("player", "Inner Fire", 600, 600); give("player", "Power Word: Fortitude", 1800, 1800); give("party2", "Prayer of Fortitude", 3600, 3500); tick()
 assert(button._attr.unit == "party1")
 
+-- A player targeted, once that is switched on
+units.target = { name = "Zed", class = "ROGUE" }; range.target = true
+fire("PLAYER_TARGET_CHANGED"); tick(0.2); assert(db.target == false and button._attr.unit == "party1", "off unless asked for")
+SlashCmdList.REBUFF("target on")
+assert(db.target == true and button._attr.unit == "target" and button._attr.spell == "Power Word: Fortitude" and button.who._text == "Zed", "the target goes first")
+printed = {}; SlashCmdList.REBUFF("status"); assert(said("target Zed: due Power Word: Fortitude"))
+post(button, "LeftButton", true); post(button, "LeftButton", false); tick(0.4); assert(button._attr.unit == "party1", "pressed: on to the next")
+fire("PLAYER_TARGET_CHANGED"); tick(0.2); assert(button._attr.unit == "target", "a new target starts afresh")
+range.target = false; tick(); assert(button._attr.unit == "party1", "a target out of range does not hold up the party")
+give("party1", "Power Word: Fortitude", 1800, 1800); tick(); assert(button.action.unit == "target" and button.action.far and next(keys) == nil)
+take("party1", "Power Word: Fortitude"); range.target = true
+NS.ToggleClass(fort, "WARRIOR"); assert(button._attr.unit == "party1", "the classes hold for the target"); NS.ToggleClass(fort, "WARRIOR")
+units.target.npc = true; tick(); assert(button._attr.unit == "party1", "players only"); units.target.npc = nil
+units.target.dead = true; tick(); assert(button._attr.unit == "party1"); units.target.dead = nil
+tick(); assert(button._attr.unit == "target")
+give("target", "Prayer of Fortitude", 3600, 3600); tick(); assert(button._attr.unit == "party1")
+units.target = units.party1; tick(); assert(button._attr.unit == "party1", "a party member targeted is cast on as the party member")
+units.target = nil; fire("PLAYER_TARGET_CHANGED"); tick(0.2); assert(button._attr.unit == "party1")
+SlashCmdList.REBUFF("target off"); assert(db.target == false)
+
 -- A raid: your own group only
 raid = true; units.party1, units.party2, units.party3, units.party4 = nil, nil, nil, nil
 units.raid1 = { name = "Eve", group = 2 }; units.raid2 = units.player; units.player.group = 1; units.raid3 = { name = "Fay", group = 1 }
@@ -377,6 +398,9 @@ window.warnings[120]._scripts.OnClick(window.warnings[120]); assert(db.warn == 1
 window.warnings[60]._scripts.OnClick(window.warnings[60])
 window.sound._checked = false; window.sound._scripts.OnClick(window.sound); assert(db.sound == false)
 window.sound._checked = true; window.sound._scripts.OnClick(window.sound); assert(db.sound == true)
+assert(window.target._checked == false); window.target._scripts.OnEnter(window.target)
+window.target._checked = true; window.target._scripts.OnClick(window.target); assert(db.target == true and window.target._checked == true)
+window.target._checked = false; window.target._scripts.OnClick(window.target); assert(db.target == false)
 -- The hotkey button
 local key = window.key
 key._scripts.OnClick(key, "LeftButton"); assert(key._keyboard and key._wheel and key._text == "Press a key...")

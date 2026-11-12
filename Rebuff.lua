@@ -53,6 +53,8 @@ local PAIRS = {
 };
 
 local SELF = { "player" };
+local TARGET = { "target" };
+local NOBODY = {};
 -- The classes a party buff can be kept to
 local CLASSES = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" };
 
@@ -327,16 +329,34 @@ local function Known(buff)
 	return named and name ~= nil;
 end
 
--- What one look shares between the buffs it checks.
+-- Whether the target is a player to offer party buffs to: the option is on,
+-- and it is someone other than you and the party, who are looked at anyway.
+local function Stranger(units)
+	if not db.target or not UnitExists("target") or not UnitIsPlayer("target") or not Around("target") then
+		return false;
+	end
+	for _, unit in ipairs(units) do
+		if UnitIsUnit("target", unit) then
+			return false;
+		end
+	end
+	return true;
+end
+
+-- What one look shares between the buffs it checks. `target` is a list like
+-- `units`: the target alone, or no one.
 local function NewScan()
-	return { now = GetTime(), auras = {}, units = Units() };
+	local units = Units();
+	local ok, stranger = pcall(Stranger, units);
+	return { now = GetTime(), auras = {}, units = units, target = ok and stranger and TARGET or NOBODY };
 end
 
 -- Everyone a buff is due on, in unit order: a list of { buff, unit, state,
 -- left, far, key }. Also how many units could not be read, and how many could.
-local function Survey(buff, scan)
+-- `units` is whom to look at; left out, it is whom the buff is kept on.
+local function Survey(buff, scan, units)
 	local due, unread, read = {}, 0, 0;
-	for _, unit in ipairs(buff.who == "party" and scan.units or SELF) do
+	for _, unit in ipairs(units or (buff.who == "party" and scan.units or SELF)) do
 		if (unit == "player" or Around(unit)) and Wanted(buff, unit) then
 			local found = scan.auras[unit];
 			if found == nil then
@@ -361,15 +381,15 @@ local function Survey(buff, scan)
 	return due, unread, read;
 end
 
--- The cast to offer: the first that is due and in reach, in the order of the
--- list, except that one pressed a moment ago goes behind the rest. With
--- nothing in reach, the first that is due out of range, to be shown only.
-local function Next()
-	local scan = NewScan();
+-- The best cast among the buffs: the first that is due and in reach, in the
+-- order of the list, except that one pressed a moment ago goes behind the
+-- rest. Second, the first that is due but out of range. With `onTarget` the
+-- party buffs are looked at on the target instead of on whom they are kept.
+local function Pick(scan, onTarget)
 	local best, bestTried, far;
 	for _, buff in ipairs(db.buffs) do
-		if Known(buff) then
-			for _, entry in ipairs((Survey(buff, scan))) do
+		if (not onTarget or buff.who == "party") and Known(buff) then
+			for _, entry in ipairs((Survey(buff, scan, onTarget and scan.target or nil))) do
 				if entry.far then
 					far = far or entry;
 				else
@@ -385,7 +405,24 @@ local function Next()
 			end
 		end
 	end
-	return best or far;
+	return best, far, bestTried;
+end
+
+-- The cast to offer. Someone targeted goes first: targeting them says who is
+-- meant. Once pressed they queue with the rest, or a cast on them that keeps
+-- failing would hold everyone else up. With nothing in reach, one that is due
+-- out of range, to be shown only.
+local function Next()
+	local scan = NewScan();
+	local onTarget, targetFar, targetTried = Pick(scan, true);
+	if onTarget and targetTried == 0 then
+		return onTarget;
+	end
+	local best, far, bestTried = Pick(scan, false);
+	if onTarget and (not best or targetTried < bestTried) then
+		return onTarget;
+	end
+	return best or targetFar or far;
 end
 
 local function Describe(entry)
@@ -781,6 +818,7 @@ local function Load()
 	if db.sound == nil then
 		db.sound = true;
 	end
+	db.target = db.target or false;
 	db.warn = db.warn or DEFAULT_WARN;
 	db.size = db.size or DEFAULT_SIZE;
 	if not (db.point and db.relativePoint and db.x and db.y) then
@@ -805,7 +843,7 @@ local WATCHED = { "^player$", "^party%d+$", "^raid%d+$" };
 local EVENTS = {
 	"UNIT_AURA", "GROUP_ROSTER_UPDATE", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_DISABLED",
 	"PLAYER_REGEN_ENABLED", "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST",
-	"PLAYER_MOUNT_DISPLAY_CHANGED", "SPELLS_CHANGED", "UNIT_CONNECTION",
+	"PLAYER_MOUNT_DISPLAY_CHANGED", "SPELLS_CHANGED", "UNIT_CONNECTION", "PLAYER_TARGET_CHANGED",
 };
 
 local events = CreateFrame("Frame");
@@ -827,6 +865,14 @@ events:SetScript("OnEvent", function(self, event, unit)
 		end
 	elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
 		Refresh();
+	elseif event == "PLAYER_TARGET_CHANGED" then
+		-- What was pressed on the last target says nothing about this one
+		for key in pairs(tried) do
+			if key:find(":target$") then
+				tried[key] = nil;
+			end
+		end
+		dirty = true;
 	else
 		dirty = true;
 	end
@@ -967,6 +1013,12 @@ function ns.SetSound(on)
 	db.sound = on and true or false;
 end
 
+-- Whether party buffs are also offered to a player you target.
+function ns.SetTarget(on)
+	db.target = on and true or false;
+	Refresh();
+end
+
 local function SetSize(size)
 	db.size = math.min(math.max(size, 20), 80);
 	Refresh();
@@ -1045,6 +1097,22 @@ local function PrintStatus()
 		end
 		print(("  %s (%s): %s"):format(buff.name, WhoText(buff), line));
 	end
+	if not db.target then
+		print("  target: not looked at, the option is off");
+	elseif #scan.target == 0 then
+		print("  target: none, or not a player outside your party who can be buffed");
+	else
+		local parts = {};
+		for _, buff in ipairs(db.buffs) do
+			local ok, due = pcall(Survey, buff, scan, scan.target);
+			if buff.who == "party" and ok then
+				for _, entry in ipairs(due) do
+					parts[#parts + 1] = entry.buff.name .. (entry.far and " (out of range)" or "");
+				end
+			end
+		end
+		print(("  target %s: %s"):format(UnitLabel("target"), #parts > 0 and "due " .. table.concat(parts, ", ") or "nothing due"));
+	end
 end
 
 local function PrintHelp()
@@ -1053,6 +1121,7 @@ local function PrintHelp()
 	print("  /rebuff key <key> - the hotkey, such as MOUSEWHEELDOWN or SHIFT-Q; none for no key. Now " .. KeyText(db.key or nil));
 	print("  /rebuff warn <seconds> - how long before a buff runs out it shows; 0 for only once it is gone. Now " .. db.warn);
 	print("  /rebuff sound on|off - a sound when a buff comes due, now " .. (db.sound and "on" or "off"));
+	print("  /rebuff target on|off - also offer party buffs to a player you target, now " .. (db.target and "on" or "off"));
 	print("  /rebuff size <20-80> - size of the button, now " .. db.size);
 	print("  /rebuff reset - put the button back in the middle of the screen");
 end
@@ -1073,6 +1142,8 @@ SlashCmdList.REBUFF = function(message)
 		ns.SetWarn(number);
 	elseif command == "sound" and (argument == "on" or argument == "off") then
 		ns.SetSound(argument == "on");
+	elseif command == "target" and (argument == "on" or argument == "off") then
+		ns.SetTarget(argument == "on");
 	elseif command == "size" and number then
 		SetSize(number);
 	elseif command == "reset" then
