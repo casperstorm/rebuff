@@ -1,0 +1,11 @@
+package-as: Rebuff
+
+ignore:
+  - .github
+  - README.md
+  - tests
+  - "*.gif"
+  - "*.png"
+  - .pkgmeta
+
+enable-nolib-creation: no

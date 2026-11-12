@@ -1,0 +1,11 @@
+## Interface: 16001
+## Title: Rebuff
+## Notes: Shows the next buff that is missing or about to run out, on you or your party, and casts it with one hotkey. /rebuff for options.
+## Author: casperstorm
+## Version: @project-version@
+## IconTexture: Interface\Icons\Spell_Holy_WordFortitude
+## AddonCompartmentFunc: Rebuff_OnAddonCompartmentClick
+## SavedVariablesPerCharacter: RebuffDB
+
+Rebuff.lua
+Window.lua
